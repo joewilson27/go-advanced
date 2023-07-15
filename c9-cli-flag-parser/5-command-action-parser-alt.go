@@ -37,6 +37,11 @@ var (
 
 func main() {
 	commandInString := kingpin.MustParse(app.Parse(os.Args[1:]))
+	/*
+		jadi kita tidak perlu menggunakan .Action seperti pada sebelumnya,
+		kita tinggal manfaatkan return value commandInString utk kemudian digunakan
+		dalam switch
+	*/
 	switch commandInString {
 
 	case commandAdd.FullCommand(): // add user

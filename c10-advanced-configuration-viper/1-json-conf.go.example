@@ -1,0 +1,68 @@
+package main
+
+/*
+Advanced Configuration Menggunakan Viper
+Pada chapter ini kita akan belajar cara mudah manajemen konfigurasi file JSON menggunakan Viper library.
+INTI DARI chapter ini sebenarnya adalah SAMA DENGAN yang sudah dibahas pada B.22. Simple Configuration,
+hanya saja di sini proses parsing di-HANDLE OLEH 3rd party dengan TIDAK MENGGUNAKAN struct untuk
+pengaksesannya.
+
+KEKURANGAN dari teknik menyimpan konfigurasi dalam object struct adalah, pada saat ada kebutuhan
+untuk MENAMBAH atau MERUBAH isi konfigurasi file, maka MENGHARUSKAN developer juga MENGUBAH SKEMA
+struct penampung. Pada bagian ini, pengaksesan property konfigurasi dilakukan lewat notasi
+string konfigurasinya.
+*/
+
+import (
+	"net/http"
+
+	"github.com/labstack/echo"
+	"github.com/spf13/viper"
+)
+
+func main() {
+	e := echo.New()
+
+	viper.SetConfigType("json")
+	viper.AddConfigPath(".")
+	viper.SetConfigName("app.config")
+	/*
+		Kode di atas adalah contoh penggunaan dasar viper, untuk parsing file konfigurasi bertipe JSON.
+		Fungsi viper.SetConfigType() digunakan untuk set JENIS/TIPE FILE konfigurasi (json, toml, yaml
+		yml, properties, props, prop).
+
+		Fungsi .AddConfigPath() digunakan untuk MENDAFTARKAN PATH FOLDER di mana file-file konfigurasi berada.
+		Fungsi ini BISA DIPANGGIL BEBERAPA kali, JIKA memang ADA BANYAK file konfigurasi tersimpan dalam path
+		berbeda.
+
+		Statement .SetConfigName() dieksekusi dengan parameter BERISI NAMA FILE konfigurasi secara eksplisit
+		TANPA EKSTENSI. Misalkan nama file adalah app.config.json, maka parameter CUKUP ditulis app.config.
+
+		Fungsi .ReadInConfig() digunakan untuk MEMPROSES file-file konfigurasi sesuai dengan path dan nama
+		yang sudah ditentukan.
+
+	*/
+
+	err := viper.ReadInConfig()
+	if err != nil {
+		e.Logger.Fatal(err)
+	}
+
+	e.GET("/index", func(c echo.Context) (err error) {
+		return c.JSON(http.StatusOK, true)
+	})
+
+	e.Logger.Print("Starting", viper.GetString("appName"))
+	e.Logger.Fatal(e.Start(":" + viper.GetString("server.port")))
+	/*
+		Cara pengaksesan konfigurasi bisa dilihat pada kode di atas. Statement viper.GetString("appName")
+		mengembalikan string "SimpleApp", sesuai dengan isi pada file konfigurasi.
+
+		Selain .GetString(), MASIH BANYAK LAGI fungsi lain yang bisa digunakan,
+		sesuaikan dengan tipe data property yang akan diambil.
+
+		Pengaksesan property nested seperti server.port juga mudah, tinggal tulis saja skema property
+		yang ingin diambil nilainya dengan separator tanda titik (.)
+
+	*/
+}
