@@ -74,6 +74,9 @@ func main() {
 			Dalam endpoint ini method Validate milik CustomValidator dipanggil.
 		*/
 		if err := c.Validate(u); err != nil {
+			/*
+				dari method Validate() ini object dari struct dimasukan ke .Struct() dalam fungsi Validate()
+			*/
 			return err
 		}
 
