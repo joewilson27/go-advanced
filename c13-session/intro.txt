@@ -1,0 +1,145 @@
+Session (Gorilla Session)
+
+Session adalah sebuah KONSEP PENYIMPANAN data yang shared antar http request.
+Session UMUMNYA MENGGUNAKAN cookie untuk menyimpan identifier (kita sebut sebagai SessionID).
+Informasi SessionID tersebut ber-ASOSIASI dengan data (kita sebut sebagai SessionData)
+yang disimpan di sisi back end dalam media tertentu.
+
+identifier (SessionID) | info <--> Data (SessionData) -> Media (Backend) 
+
+Di back end, SessionData DISIMPAN dalam media database, atau memory, atau fasilitas
+penyimpanan lainnya. BISA SAJA sebenarnya jika SessionData juga disimpan dalam cookie,
+dengan memanfaatkan secure cookie maka SessionData tersebut ter-enkripsi dan aman dari
+peretas. Memang aman, tapi jelasnya LEBIH AMAN kalau DISIMPAN di sisi server.
+
+disini kita akan mempelajari penerapan session di golang menggunakan BEBERAPA JENIS
+media penyimpanan, yaitu mongo db, postgres sql db, dan secure cookie.
+
+1. Manage Session Menggunakan Gorilla Sessions
+Gorilla Sessions adalah library untuk manajemen session di golang.
+Gorilla MENYEDIAKAN interface sessions.Store, lewat interface ini kita BISA MENGAKSES
+3 buah method penting untuk manage session. 
+Store sendiri adalah REPRESENTASI dari media penyimpanan di back end, bisa berupa database, memory, atau lainnya.
+Objek store dibuat oleh library lain yang merupakan implementasi dari interface store
+itu sendiri.
+3 buah method dari session.Store yang dimaksud adalah berikut:
+- Method .Get(r *http.Request, name string) (*Session, error),
+  mengembalikan objek session. Jika session yang dengan name yang dicari TIDAK ADA,
+  maka objek session baru dikembalikan.
+- Method .New(r *http.Request, name string) (*Session, error), MENGEMBALIKAN objek session
+  baru.
+- Method .Save(r *http.Request, w http.ResponseWriter, s *Session) error, digunakan
+  untuk MENYIMPAN session baru.
+Dari ketiga method di-atas saya rasa cukup jelas sekilas bagaimana cara mengakses,
+membuat, dan menyimpan session.
+
+  *fokus membahas API milik interface sessions.Store dahulu, mengenai pembuatan store
+   sendiri ada di pembahasan setelahnya.
+
+Lalu bagaimana dengan operasi hapus/delete? Seperti yang sudah dijelaskan sebelumnya,
+informasi session dipisah menjadi dua, PERTAMA adalah SessionID yang disimpan di cookie,
+dan KEDUA adalah SessionData yang disimpan di back end. Cara untuk MENGHAPUS SESSION 
+adalah cukup dengan meng-expired-kan cookie yang menyimpan SessionID.
+
+Cookie merupakan SALAH SATU header pada http request, operasi yang berhubungan dengan
+cookie PASTI MEMBUTUHKAN objek http.Request dan http.ResponseWriter. Jika menggunakan
+echo, kedua objek tersebut bisa diakses lewat objek http context echo.Context.
+
+// 2. Membuat Objek Session Baru
+Berikut adalah contoh cara membuat session lewat store.
+
+e.GET("/set", func(c echo.Context) error {
+    session, _ := store.Get(c.Request(), SESSION_ID)
+    session.Values["message1"] = "hello" // data berindetifier ("message1") string dan value string
+    session.Values["message2"] = "world" // data berindetifier ("message2") string dan value string
+    session.Save(c.Request(), c.Response())
+
+    return c.Redirect(http.StatusTemporaryRedirect, "/get")
+})
+
+Statement store.Get() MENGEMBALIKAN dua objek dengan tipe session.Session dan error.
+Pemanggilan method ini memerlukan dua buah parameter untuk disisipkan, yaitu objek http
+request, dan nama/key SessionID yang disiapkan di konstanta SESSION_ID. Method .Get()
+ini AKAN SELALU MENGEMBALIKAN objek session, ADA ATAUPUN TIDAK ADA session yang dicari,
+objek session TETAP DIKEMBALIKAN.
+
+  *Pembuatan objek session BARU BISA dilakukan lewat store.New() maupun store.Get().
+
+Dari objek session, AKSES property mutable .Values untuk MENGAMBIL ataupun MENGISI data
+session. Objek ini BERTIPE map[interface{}]interface{}, berarti SessionData yang akan
+disimpan juga harus memiliki identifier.
+
+Pada contoh di atas, dua buah data bertipe string disimpan, dengan identifier data
+yang juga string.
+SessionData "hello" disimpan dengan identifier adalah message1.
+SessionData "world" disimpan dengan identifier adalah message2.
+
+Cara menyimpan session adalah dengan memanggil method .Save() milik objek session,
+dengan parameter adalah http request dan response.
+
+// 3. Mengakses SessionData
+SessionData diakses dari objek session, berikut merupakan contoh caranya.
+
+e.GET("/get", func(c echo.Context) error {
+    session, _ := store.Get(c.Request(), SESSION_ID)
+
+    if len(session.Values) == 0 {
+        return c.String(http.StatusOK, "empty result")
+    }
+
+    return c.String(http.StatusOK, fmt.Sprintf(
+        "%s %s",
+        session.Values["message1"],
+        session.Values["message2"],
+    ))
+})
+
+Seperti yang sudah dibahas di atas, objek session kembalian store.Get() TIDAK AKAN PERNAH
+berisi nil. Ada atau tidak, objek session SELALU DIKEMBALIKAN.
+
+Dari objek session dilakukan pengecekan ada tidaknya SessionData, caranya dengan cara
+MENGHITUNG ISI property .Values yang tipenya map. Jika isinya kosong maka session
+belum ada (atau mungkin ada hanya saja expired, atau bisa saja ada tapi invalid).
+
+Pada kode di atas, jika SessionData kosong maka string empty result ditampilkan ke layar.
+Sedangkan jika ada, maka kedua SessionData (message1 dan message2) diambil lalu
+ditampilkan.
+
+// 4. Menghapus Session
+Cara menghapus session adalah dengan meng-EXPIRED-kan max age cookie-nya. Property max age
+bisa diakses lewat session.Options.MaxAge
+
+e.GET("/delete", func(c echo.Context) error {
+    session, _ := store.Get(c.Request(), SESSION_ID)
+    session.Options.MaxAge = -1
+    session.Save(c.Request(), c.Response())
+
+    return c.Redirect(http.StatusTemporaryRedirect, "/get")
+})
+Isi dengan -1 property .MaxAge agar expired, lalu simpan ulang kembali session-nya.
+
+// 5. Session Store dan Context Clear Handler
+Session Store adalah REPRESENTASI dari media tempat DIMANA data asli session disimpan.
+Gorilla menyediakan CookieStore, penyimpanan data asli pada store ini adalah juga di
+dalam cookie, namun di-encode dan di-enkripsi menggunakan Securecookie.
+
+Selain CookieStore, ADA BANYAK store lain yang bisa kita gunakan. Komunitas begitu baik
+telah menyediakan berbagai macam store berikut.
+- github.com/starJammer/gorilla-sessions-arangodb - ArangoDB
+- github.com/yosssi/boltstore - Bolt
+- github.com/srinathgs/couchbasestore - Couchbase
+- ...dll
+
+Objek store dibuat SEKALI di AWAL (atau BISA SAJA berkali-kali di tiap handler,
+tergantung kebutuhan). Pada pembuatan objek store, umumya ada beberapa konfigurasi
+yang perlu disiapkan dan dua buah keys: authentication key dan encryption key.
+
+Dari objek store tersebut, dalam handler, kita BISA MENGAKSES objek session dengan
+menyisipkan context http request. Silakan lihat kode berikut untuk lebih jelasnya.
+Store direpresentasikan oleh variabel objek store.
+
+  store := newMongoStore()
+
+  ... bersambung 
+
+  // 6. Mongo DB Store
